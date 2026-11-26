@@ -1,0 +1,33 @@
+{
+  // Markdown lint for RenoBench. Run through mise:
+  //   mise x -- markdownlint-cli2          # lint
+  //   mise x -- markdownlint-cli2 --fix    # lint + autofix
+  // lefthook.yml runs the --fix form on staged .md files in the pre-commit stage.
+
+  "globs": ["**/*.md"],
+
+  // Everything is linted, recorded results included. The ruleset below is one that
+  // llama-bench and harness.py output already satisfies, so `--fix` in the pre-commit
+  // hook never rewrites benchmark data — but a truncated or hand-mangled results table
+  // still fails the commit.
+  "ignores": ["**/node_modules/**", "**/.git/**"],
+
+  "config": {
+    // Hand-written prose wraps at 80. Table rows and fenced blocks are exempt because
+    // wide tables (run index, task examples) can't be wrapped by hand.
+    "MD013": { "line_length": 80, "tables": false, "code_blocks": false },
+
+    // Compact `|---|` delimiter rows; markdownlint's default prefers `| --- |`.
+    "MD060": false,
+
+    // llama-bench output starts straight into its table, and recorded results are not
+    // edited by hand, so an H1 can't be required of every file.
+    "MD041": false,
+
+    // Repeated section headings are fine as long as they aren't siblings.
+    "MD024": { "siblings_only": true },
+
+    // Inline HTML allowed for badges/icons.
+    "MD033": false
+  }
+}

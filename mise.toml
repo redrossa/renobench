@@ -1,0 +1,7 @@
+# harness.py is stdlib-only; tomllib needs Python >= 3.11.
+# Evals themselves run on forge (GPU + inference stack), not here.
+[tools]
+lefthook = "2.2.3"
+node = "26.13.1"
+"npm:markdownlint-cli2" = "0.24.2"
+python = "3.12.16"

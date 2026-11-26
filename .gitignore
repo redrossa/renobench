@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+
+# secrets / machine-local inference config stays on forge (~/inference/.env)
+.env

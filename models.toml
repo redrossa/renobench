@@ -1,0 +1,15 @@
+# Models the harness can test. "profile" = compose profile in ~/inference.
+# Optional per-model request params go under [models.<name>.params].
+
+[models.qwen27b]
+profile = "qwen27b"
+base_url = "http://localhost:8080/v1"
+
+[models.inkling]
+profile = "inkling"
+base_url = "http://localhost:8080/v1"
+
+[models.flash]
+profile = "flash"
+base_url = "http://localhost:8080/v1"
+api_key_env = "STRATA_API_KEY"   # read from ~/inference/.env

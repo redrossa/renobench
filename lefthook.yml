@@ -1,0 +1,17 @@
+# RenoBench git hooks. Install once per clone:
+#   mise x -- lefthook install
+# Escape hatch when a run must be recorded right now: git commit --no-verify
+
+pre-commit:
+  parallel: true
+  commands:
+    markdownlint:
+      glob: "*.md"
+      run: mise x -- markdownlint-cli2 --fix {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    conventional-commit:
+      # {1} is the commit message file git handed to the hook.
+      run: scripts/check-commit-msg.sh {1}
