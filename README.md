@@ -105,6 +105,27 @@ One JSON object per line in `tasks/*.jsonl`:
 `check.type` is one of `python_tests` | `regex` | `contains` | `fullmatch`.
 `id` must be unique across the suite, because results key on `model` + `id`.
 
+## Personal data and fixtures
+
+Several planned categories — health monitoring, personal finance, online
+shopping, literature review — are only meaningful with realistic data, so this
+rule is part of the benchmark rather than a preference:
+
+- Fixtures committed here are **synthetic or scrubbed**. No real accounts,
+  transactions, medical records, contacts, addresses, calendar entries, or
+  exported documents, not even anonymized-looking ones.
+- Scrubbed means *replaced*, not redacted: invent values with the same shape
+  (amounts, dates, dosages, titles, symptom wording) instead of masking real
+  ones. Masked data still leaks ranges, cadence and habits.
+- Prompts and expected answers must be checkable without private data, so a
+  task scored here is reproducible by anyone who clones the repo.
+- If a run genuinely needs your real data to be worth doing, its output —
+  `raw.jsonl` and transcripts included — stays out of this repo. Run it locally
+  or in a private sibling repo and commit only aggregate numbers here.
+
+One repo, public, with tasks honest enough to matter: that is the point of the
+rule.
+
 ## Dev tooling
 
 Repo-local and hard-pinned via mise — nothing is installed machine-wide:
