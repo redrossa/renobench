@@ -13,3 +13,9 @@ base_url = "http://localhost:8080/v1"
 profile = "flash"
 base_url = "http://localhost:8080/v1"
 api_key_env = "STRATA_API_KEY"   # read from ~/inference/.env
+
+# Trial: same model one quant tier up (IQ3_S, experts 3.33 bpw vs 2.84).
+[models.flash-iq3s]
+profile = "flash-iq3s"
+base_url = "http://localhost:8080/v1"
+api_key_env = "STRATA_API_KEY"
