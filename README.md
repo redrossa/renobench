@@ -26,22 +26,27 @@ models.toml                 model registry -> compose profile + base_url
 tasks/                      task suites, one JSONL file per suite
 results/                    recorded runs (see results/README.md)
 lefthook.yml                git hooks: commit message + markdown lint
-scripts/                    hook scripts
+scripts/ssd-probe.py        disk/swap probe for one long fresh request
+scripts/check-commit-msg.sh commit-msg hook
 mise.toml                   lefthook, markdownlint-cli2, node, python
 .markdownlint-cli2.jsonc    markdown rules
 ```
 
-## What v0 measures
+## What it measures
 
 | suite | what | how it's scored |
 |---|---|---|
-| `tasks` | 7 tasks: `code`, `reasoning`, `domain`, `instruction` | `python_tests` runs the model's code in a network-isolated `python:3.12-slim` container (`--memory 1g --cpus 1`); the rest are regex/fullmatch checks |
+| `tasks` / `v0` | 7 easy tasks: `code`, `reasoning`, `domain`, `instruction` | `python_tests` runs the model's code in a network-isolated `python:3.12-slim` container (`--memory 1g --cpus 1`); the rest are regex/fullmatch checks |
+| `tasks` / `v1` | 14 harder tasks: a parser, a minimal diff, a bug fix, an interval booker; inclusion-exclusion, a dice race, a seating puzzle, calendar arithmetic; mortgage payment and balance, steady-state dosing, creatinine clearance; strict JSON and word-count constraints | same sandbox; numeric answers checked with tolerances and the JSON/poem replies by `answer_tests` asserts; 16K-token budgets |
+| `aggregate` | sum one vendor's 8 invoices scattered through a 32K/128K haystack that also holds 16 invoices from 3 other vendors | the `ANSWER:` total must match to the cent |
 | `needle` | long-context recall at 8K/32K/64K/128K/190K tokens, needle at 10%/50%/90% depth | exact needle string must appear in the reply; TTFT and prefill tok/s recorded |
 | llama-bench | raw prefill/generate throughput at context 0/32K/128K/192K | `llama-bench` markdown output |
 
 Every task records TTFT, answer-start, total time, prompt/completion/reasoning
 tokens and gen/prefill tok/s into `raw.jsonl`, so timings and correctness stay
-separable.
+separable. `--repeats N` samples every task and aggregate length N times, and
+the summary counts truncations (`finish_reason=length`) separately, so a
+budget failure is not mistaken for a wrong answer.
 
 ## Models under test
 
@@ -49,7 +54,8 @@ separable.
 |---|---|---|
 | `qwen27b` | llama.cpp `server-cuda`, 200K ctx, q4_0 KV | `unsloth/Qwen3.8-27B-GGUF` → `Qwen3.8-27B-UD-Q4_K_XL.gguf` |
 | `inkling` | llama.cpp `server-cuda`, 200K ctx, q8_0 KV, `--n-cpu-moe 0`, `--load-mode none` | `unsloth/Inkling-2-Mini-GGUF` → `Inkling-2-Mini-UD-Q4_K_XL.gguf` |
-| `flash` | `strata` (llamaswap), 262K ctx, IQ3_XXS | `qwen3.8-flash-next` |
+| `flash` | `strata` (llamaswap), 262K ctx, IQ3_XXS, 2 GiB conversation cache | `qwen3.8-flash-next` |
+| `flash-iq3s` | same, IQ3_S (trial profile, `restart: "no"`) | `qwen3.8-flash-next` |
 
 ## Running it
 
@@ -61,6 +67,7 @@ cd ~/ghq/github.com/redrossa/renobench     # ghq clone of this repo
 ./harness.py --models qwen27b,inkling      # subset
 ./harness.py --suites tasks --no-switch    # keep the server that is already up
 ./harness.py --suites needle --needle-lengths 8000,64000
+./harness.py --suites tasks,aggregate --task-sets v0,v1 --repeats 3
 ./bench.sh                                 # throughput (stops the stack first)
 ```
 
@@ -92,6 +99,22 @@ reciting filler after 4096 tokens. The one clean capability failure is
 Raw llama.cpp throughput for the same weights:
 [`results/llama-bench`](results/llama-bench).
 
+How `flash` copes with 32 GB of RAM:
+[`results/ssd-probe`](results/ssd-probe/flash-20261126-0422.md). Strata streams
+experts from the NVMe (~68 GB read per fresh 71K-token prefill) and still
+prefills at ~1,440 tok/s and decodes at ~79 tok/s.
+
+```bash
+./scripts/ssd-probe.py --model flash      # on forge, model already served
+```
+
+One quant tier up for `flash`:
+[`results/compare-flash-iq3xxs-vs-iq3s`](results/compare-flash-iq3xxs-vs-iq3s/summary.md).
+IQ3_S ties IQ3_XXS on quality (64/69 samples each over 21 tasks × 3 and the
+aggregate suite) and is ~27–31% slower on this 32 GB machine, so `flash`
+stays on IQ3_XXS. Details in
+[`results/README.md`](results/README.md#iq3_xxs-vs-iq3_s-on-forge).
+
 ## Adding tasks
 
 One JSON object per line in `tasks/*.jsonl`:
@@ -102,8 +125,14 @@ One JSON object per line in `tasks/*.jsonl`:
  "check": {"type": "python_tests", "tests": "assert LRUCache(1)..."}}
 ```
 
-`check.type` is one of `python_tests` | `regex` | `contains` | `fullmatch`.
-`id` must be unique across the suite, because results key on `model` + `id`.
+`check.type` is one of `python_tests` | `answer_tests` | `regex` | `contains` |
+`fullmatch`. `answer_tests` runs its asserts against the reply text (`ANSWER`)
+in the same sandbox, with `answer_line()` and `answer_numbers()` helpers for
+the last `ANSWER:` line, which is how numeric tolerances are checked. `id` must
+be unique across all task files, because results key on `model` + `id`.
+
+Verify a new task's checker against a correct reply and a plausible wrong one
+before committing it: a checker that passes both measures nothing.
 
 ## Personal data and fixtures
 
@@ -156,4 +185,3 @@ Escape hatch for a commit you really must make now: `git commit --no-verify`.
 
 - agentic tasks on real workflows: file/shell chores, git, browser sessions
 - literature-review, health and personal-finance tasks with personal fixtures
-- multiple runs per model for variance, and per-task token budgets
