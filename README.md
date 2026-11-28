@@ -53,7 +53,7 @@ budget failure is not mistaken for a wrong answer.
 | name | served by | weights |
 |---|---|---|
 | `qwen27b` | llama.cpp `server-cuda`, 200K ctx, q4_0 KV | `unsloth/Qwen3.8-27B-GGUF` → `Qwen3.8-27B-UD-Q4_K_XL.gguf` |
-| `inkling` | llama.cpp `server-cuda`, 200K ctx, q8_0 KV, `--n-cpu-moe 0`, `--load-mode none` | `unsloth/Inkling-2-Mini-GGUF` → `Inkling-2-Mini-UD-Q4_K_XL.gguf` |
+| `inkling` | llama.cpp `server-cuda`, 200K ctx, q8_0 KV, `--n-cpu-moe 0`, `--load-mode none` | `ISTA-DASLab/Inkling-2-Mini-GSQ-RCO-GGUF` → `Inkling-2-Mini-GSQ-RCO-IQ3_S.gguf` (until 2026-11-28: `unsloth/Inkling-2-Mini-GGUF` → `Inkling-2-Mini-UD-Q4_K_XL.gguf`) |
 | `flash` | `strata` (llamaswap), 262K ctx, IQ3_XXS, 2 GiB conversation cache | `qwen3.8-flash-next` |
 | `flash-iq3s` | same, IQ3_S (trial profile, `restart: "no"`) | `qwen3.8-flash-next` |
 
@@ -69,6 +69,7 @@ cd ~/ghq/github.com/redrossa/renobench     # ghq clone of this repo
 ./harness.py --suites needle --needle-lengths 8000,64000
 ./harness.py --suites tasks,aggregate --task-sets v0,v1 --repeats 3
 ./bench.sh                                 # throughput (stops the stack first)
+./bench.sh inkling                         # only the named models
 ```
 
 The harness switches Compose profiles itself, waits for the server to report
@@ -114,6 +115,13 @@ IQ3_S ties IQ3_XXS on quality (64/69 samples each over 21 tasks × 3 and the
 aggregate suite) and is ~27–31% slower on this 32 GB machine, so `flash`
 stays on IQ3_XXS. Details in
 [`results/README.md`](results/README.md#iq3_xxs-vs-iq3_s-on-forge).
+
+Inkling-2-Mini, ISTA-DASLab's GSQ-RCO IQ3_S against Unsloth's UD-Q4_K_XL:
+[`results/run-20261127-2238`](results/run-20261127-2238/summary.md). Equal on
+quality (55/63 tasks each, 15/15 needle each), 6–10% faster generation and
+~6 GB less VRAM, so `inkling` now serves IQ3_S. Both trail `flash`,
+most clearly on long-context aggregation, where their thinking tends to
+recite the haystack: [all four side by side](results/compare-flash-vs-inkling/summary.md).
 
 ## Adding tasks
 

@@ -37,12 +37,16 @@ A run is complete when `summary.md` exists and every model in `models.toml`
 |---|---|---|---|
 | [`run-20261125-0339`](run-20261125-0339/summary.md) | qwen27b, inkling, flash | tasks (7), needle (8K–190K × 3 depths) | tasks 5/7 · 7/7 · 7/7 — needle 15/15 · 14/15 · 15/15 |
 | [`llama-bench/qwen27b.md`](llama-bench/qwen27b.md) | qwen27b | pp2048 / tg256 @ ctx 0, 32K, 128K, 192K | prefill 3498 → 1096 tok/s, generate 48 → 29 tok/s |
-| [`llama-bench/inkling.md`](llama-bench/inkling.md) | inkling | same grid | prefill 1248 → 167 tok/s, generate 73 → 45 tok/s |
+| [`llama-bench/inkling.md`](llama-bench/inkling.md) | inkling (UD-Q4_K_XL) | same grid | prefill 1248 → 167 tok/s, generate 73 → 45 tok/s |
 | [`ssd-probe/flash-20261126-0422`](ssd-probe/flash-20261126-0422.md) | flash | 2 × fresh 71K prompt + 1500 tokens | prefill 1437 tok/s reading 68 GB, decode 79 tok/s reading 12 GB, expert hit 92% |
 | [`run-20261126-0446`](run-20261126-0446/summary.md) | flash (IQ3_XXS) | tasks v0+v1 (21) × 3, aggregate 32K/128K × 3 | tasks 59/63, aggregate 5/6 |
 | [`run-20261126-0621`](run-20261126-0621/summary.md) | flash-iq3s (IQ3_S) | same | tasks 58/63, aggregate 6/6 |
 | [`ssd-probe/flash-iq3s-20261126-0808`](ssd-probe/flash-iq3s-20261126-0808.md) | flash-iq3s | 2 × fresh 71K prompt + 1500 tokens | prefill 996 tok/s reading 85 GB, decode 57 tok/s reading 21 GB, expert hit 88% |
 | [`compare-flash-iq3xxs-vs-iq3s`](compare-flash-iq3xxs-vs-iq3s/summary.md) | flash, flash-iq3s | the two runs above, side by side | see below |
+| [`run-20261127-2238`](run-20261127-2238/summary.md) | inkling (UD-Q4_K_XL), inkling-iq3s (GSQ-RCO IQ3_S) | tasks v0+v1 × 3, aggregate 32K/128K × 3, needle 15 cells | tasks 55/63 · 55/63, aggregate 1/6 · 0/6, needle 15/15 · 15/15 |
+| [`llama-bench/inkling-iq3s.md`](llama-bench/inkling-iq3s.md) | inkling-iq3s | pp2048 / tg256 @ ctx 0, 32K, 128K, 192K | prefill 1214 → 166 tok/s, generate 80 → 48 tok/s |
+| [`ssd-probe/inkling-20261128-0344`](ssd-probe/inkling-20261128-0344.md), [`inkling-iq3s-20261128-0339`](ssd-probe/inkling-iq3s-20261128-0339.md) | inkling, inkling-iq3s | 2 × fresh 72K prompt + 1500 tokens | prefill 587 · 579 tok/s, decode 54.9 · 59.0 tok/s, no disk reads |
+| [`compare-flash-vs-inkling`](compare-flash-vs-inkling/summary.md) | all four | the three task runs above, side by side | see below |
 
 ## What the v0 failures actually were
 
@@ -119,6 +123,50 @@ On this 32 GB machine IQ3_XXS is the better trade; the strata catalog's
 "matches the full model" for IQ3_S does not show up at this benchmark's
 resolution.
 
+## Inkling-2-Mini: GSQ-RCO IQ3_S vs Unsloth UD-Q4_K_XL
+
+ISTA-DASLab's IQ3_S (3.50 bpw, a quant type chosen per tensor) against the
+Unsloth Q4_K_XL already on forge, with identical llama.cpp flags (200K ctx,
+q8_0 KV, `-ub 64`, temperature 1.0) and the chat template's default reasoning
+effort, `high` (0.9). ISTA's own numbers are at `xhigh`.
+
+| | UD-Q4_K_XL (`inkling`) | GSQ-RCO IQ3_S (`inkling-iq3s`) |
+|---|---|---|
+| file | 16.4 GiB | 10.6 GiB |
+| VRAM at 200K ctx | 22.8 GB | 16.5 GB |
+| tasks (21 × 3) | 55/63, 7 truncated | 55/63, 8 truncated |
+| aggregate (2 lengths × 3) | 1/6 | 0/6 |
+| needle (15 cells) | 15/15 | 15/15 |
+| median gen tok/s over the tasks | 65.9 | 72.0 |
+| llama-bench generate @ 0 / 192K | 73.0 / 45.4 | 80.4 / 48.2 |
+| llama-bench prefill @ 0 / 192K | 1,248 / 167 | 1,214 / 166 |
+| probe, fresh 72K prompt: prefill / decode | 587 / 54.9 tok/s | 579 / 59.0 tok/s |
+
+IQ3_S matches Q4_K_XL at this benchmark's resolution, generates 6–10%
+faster, prefills at the same speed, and leaves ~6 GB more VRAM free: a strict
+upgrade on forge, so the `inkling` profile now serves it. The per-task
+results differ by at most one sample, and the misses are the same kind in
+both:
+
+- Truncation, not wrong answers: `code-expr-eval` and
+  `finance-remaining-balance` used the whole 16,384-token budget in 11 of 12
+  samples across the two. llama.cpp has no equivalent of strata's
+  `answer_room` cut, so at effort `high` the thinking runs into `max_tokens`
+  and no answer is written.
+- The aggregate suite exposes a long-context failure mode in both quants: in 9
+  of the 11 failures (all 5 of Q4_K_XL's, 4 of IQ3_S's 6) the thinking starts
+  reciting the haystack filler verbatim until the 8,192-token budget runs out,
+  the same breakdown as the Q4_K_XL needle miss in `run-20261125-0339`. IQ3_S's
+  other two ran out of budget while working: one still listing invoices, one
+  (128K, rep 3) after reaching the exact total in its thinking.
+
+Against `flash` ([`compare-flash-vs-inkling`](compare-flash-vs-inkling/summary.md)):
+both Inkling builds trail on tasks (55 vs 58–59 of 63) and, clearly, on
+aggregation (0–1 vs 5–6 of 6), and prefill at ~40% of flash's speed on a
+fresh long prompt (~580 vs 1,437 tok/s), though they never touch the disk.
+Part of the task gap is the server rather than the model: strata closes the
+thinking at 75% of `max_tokens` and so always answers, llama.cpp does not.
+
 ## Environment for the runs above
 
 - Machine: forge — RTX 4090 24 GB, Ryzen 5 5600X (12 threads), 32 GB RAM
@@ -128,6 +176,14 @@ resolution.
 - `flash`: `ghcr.io/niko1221/strata:latest-cuda13` (engine 0.1.67), 262144
   ctx, IQ3_XXS, int8 KV, `--mmap-experts`; from the ssd-probe run on,
   conversation cache 2048 MiB (default 8192)
+- `inkling` names two builds: UD-Q4_K_XL in every run up to and including
+  `run-20261127-2238` (and in `llama-bench/inkling.md` until `bench.sh`
+  refreshes it), GSQ-RCO IQ3_S after that. In `run-20261127-2238`, the IQ3_S
+  ran as `inkling-iq3s`.
+- `inkling-iq3s`: `ISTA-DASLab/Inkling-2-Mini-GSQ-RCO-GGUF` at revision
+  `f0da109`, `Inkling-2-Mini-GSQ-RCO-IQ3_S.gguf` (sha256 `8a351537…`), same
+  flags as `inkling`; both Inkling runs at the template's default reasoning
+  effort (`high`)
 - llama.cpp serving: `-c 200000 -np 1 -fa on -ngl 999 --jinja`
   - qwen27b: `-ctk q4_0 -ctv q4_0`
   - inkling: `-ctk q8_0 -ctv q8_0 -ub 64 --n-cpu-moe 0 --load-mode none`
