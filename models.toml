@@ -5,6 +5,8 @@
 profile = "qwen27b"
 base_url = "http://localhost:8080/v1"
 
+# ISTA-DASLab GSQ-RCO IQ3_S since 2026-11-28 (run-20261127-2238 calls it
+# inkling-iq3s); runs labelled `inkling` before that are Unsloth UD-Q4_K_XL.
 [models.inkling]
 profile = "inkling"
 base_url = "http://localhost:8080/v1"
