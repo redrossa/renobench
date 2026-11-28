@@ -149,6 +149,14 @@ def fmt(x, nd=1):
     return "-" if x is None else f"{x:,.{nd}f}"
 
 
+def decode_tps(r):
+    """strata's own decode rate when it reports one, else tokens over decode time."""
+    st = r.get("strata") or {}
+    if st.get("decode_tok_s"):
+        return st["decode_tok_s"]
+    return r["completion_tokens"] / r["decode"]["s"] if r.get("completion_tokens") else None
+
+
 def write_report(path, recs):
     first = recs[0]
     req = first["request"]
@@ -169,8 +177,7 @@ def write_report(path, recs):
         st = r.get("strata") or {}
         p, d = r["prefill"], r["decode"]
         pre_tps = r["prompt_tokens"] / p["s"] if r.get("prompt_tokens") else None
-        dec_tps = st.get("decode_tok_s") or (
-            r["completion_tokens"] / d["s"] if r.get("completion_tokens") else None)
+        dec_tps = decode_tps(r)
         hit = st.get("hit_rate")
         L.append(f"| {i} | {fmt(r.get('prompt_tokens'), 0)} | {fmt(st.get('reused'), 0)} | "
                  f"{fmt(p['s'])} | {fmt(pre_tps, 0)} | {fmt(p['disk_gb'], 2)} | "
@@ -187,7 +194,7 @@ def write_report(path, recs):
               "|---|---|---|---|",
               f"| {m(lambda r: r['prompt_tokens'] / r['prefill']['s'] if r.get('prompt_tokens') else None, 0)} "
               f"| {m(lambda r: r['prefill']['disk_gb'], 2)} "
-              f"| {m(lambda r: (r.get('strata') or {}).get('decode_tok_s'))} "
+              f"| {m(decode_tps)} "
               f"| {m(lambda r: r['decode']['disk_gb'], 2)} |"]
     L.append("")
     path.write_text("\n".join(L))
